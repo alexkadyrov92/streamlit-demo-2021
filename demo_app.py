@@ -1,102 +1,373 @@
 import pandas as pd
+from sqlalchemy import create_engine
+import sqlite3
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import bar_chart_race as bcr
 import streamlit as st
-import plotly.express as px
-from matplotlib import pyplot as plt
+import ffmpeg
+import rpy2.robjects as ro
+from math import pi
+from rpy2.robjects import pandas2ri
+from rpy2.robjects.conversion import localconverter
 
-df = pd.read_csv("https://gist.githubusercontent.com/alexkadyrov92/3ae5358d4547cb6a6f3ab0e79c346cf2/raw/9e7a8397e3f0d055a0ef59d214d282f1c1b65cad/exoplanet.eu_catalog.csv", )
-df1 = df.drop(['mass_error_min', 'mass_error_max', 'mass_sini_error_min', 'mass_sini_error_max', 'radius_error_min', 'radius_error_max','orbital_period_error_min', 'orbital_period_error_max', 'semi_major_axis_error_min', 'semi_major_axis_error_max','eccentricity_error_min', 'eccentricity_error_max','inclination_error_min', 'inclination_error_max','omega_error_min', 'omega_error_max', 'tperi_error_min', 'tperi_error_max', 'tconj_error_min', 'tconj_error_max', 'tzero_tr_error_min', 'tzero_tr_error_max', 'tzero_tr_sec_error_min', 'tzero_tr_sec_error_max', 'lambda_angle_error_min', 'lambda_angle_error_max', 'impact_parameter_error_min', 'impact_parameter_error_max', 'tzero_vr_error_min', 'tzero_vr_error_max', 'k_error_min', 'k_error_max', 'temp_calculated_error_min', 'temp_calculated_error_max', 'geometric_albedo_error_min', 'geometric_albedo_error_max', 'star_distance_error_min', 'star_distance_error_max', 'star_metallicity_error_min', 'star_metallicity_error_max', 'star_mass_error_min', 'star_mass_error_max', 'star_radius_error_min', 'star_radius_error_max','star_age_error_min', 'star_age_error_max', 'star_teff_error_min', 'star_teff_error_max',], axis = 1)
-st.title("Exoplanets Dashboard")
-"Этот дэшборд вдохновлен курсом 'Введение в астрофизику', который читают на факультете Совместного Бакалавриата ВШЭ и РЭШ. В качестве главного источника данных был взят сайт exoplanets.eu. Зрителю предлагается посмотреть на визуализацию некоторых данных с этого датасэта. В основном будут рассмотрены методы открытия экзопланет, а также экзопланеты, которые могут (однажды) стать новым домом для человечества."
-df = df1.groupby('detection_type')['# name'].nunique()
-explode = (0, 0, 0, 0, 0.2, 0, 0, 0)
-fig1, ax1 = plt.subplots()
-labels = ["Astrometry", "Default", "Imaging", "Microlensing", "Primary Transit", "Radial Velocity",
-          "TTV", "Timing"]
-ax1.pie(df, explode=explode, counterclock=False,
-        shadow=True, startangle=120)
-plt.legend(labels)
-plt.title("Доли способов открытия экзопланет за все время")
-ax1.axis('equal')
-"Сначала давайте рассмотрим методы обнаружения экзопланет. Это не так просто, так как в обычный телескоп их очень сложно увидеть из-за того, что звезды своим светом блокируют свет планет."
-"Всего существует 8 способов обнаружить экзопланету (тут я не очень уверен, так как неясно, что за метод 'Default', но в датасете он присутствует), про каждый из них можно отдельно почитать, к примеру, на Википедии. На первой круговой диаграмме видно, какое количество ото всех экзопланет было открыто тем или иным способом"
-st.pyplot(fig1)
-"Видно, что метод Primary Transit сильно доминирует, им открыто более 3000 экзопланет, но засчет чего? Почему засекать малейшие измнения в движении звезд или улавливать небольшие световые искривления сложнее, чем периодически мониторить свет звезд?"
-"В поиске ответа на этот вопрос нам поможет вторая диаграмма, которая наглядно показывает то, какой метод был наиболее популярен в определенное время."
-datedect = pd.DataFrame(index=df1["discovered"].sort_values().dropna().unique(),
-                        columns=df1["detection_type"].unique(), dtype=int)
-datedect.fillna(0, inplace=True)
-for i in range (0, len(df1)):
-    for j in df1["detection_type"].unique():
-        if df1.iloc[i]["detection_type"] == j and np.isnan(df1.iloc[i]["discovered"]) == False:
-            datedect.loc[df1.iloc[i]["discovered"]][j] += 1
-datedect["sum"] = datedect.sum(axis=1)
-datedect2 = pd.DataFrame(index=df1["discovered"].sort_values().dropna().unique(),
-                         columns=df1["detection_type"].unique(), dtype=float)
-datedect2.fillna(0, inplace=True)
-for i in range (0, len(datedect)):
-    for j in df1["detection_type"].unique():
-        datedect2.iloc[i][j] = datedect.iloc[i][j]/datedect.iloc[i]["sum"]*100
-fig2 = plt.figure()
-plt.stackplot(datedect2.index, datedect2.values.T, labels=df1["detection_type"].unique())
-plt.legend(title='Legend', bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.title("Доли способов открытия экзопланет по годам")
-plt.xlabel("Год")
-plt.ylabel("Процент открытых экзопланет")
-st.pyplot(fig2)
-"В определенный момент произошел бум Транзитного метода, а именно годах в 2005-2010. Ищем какую-нибудь информацию по этому поводу в гугле. Получаем ответ на наш вопрос: запуски космических миссий CoRoT и Kepler в 2006 и 2009 годах соответственно. Эти телескопы были запущены как раз для поиска экзопланет транзитным методом."
-"Второе, что очень интересует в экзопланетах - наличие жизни на них. Пока что на вопрос о наличии ответить трудно, но можно ответить на другой. Может ли в теории планета поддерживать жизнь?"
-"На данный момент существует не так много критериев, которые могли бы показать, поддерживает ли планета жизнь или нет. Я избрал те, которые точно присутствуют в нашем датасете. А именно, массу планеты, массу звезды, к которой принадлежит эта планета, 'металличность' и температура этой звезды, наличие на планете химических элементов, необходимых для поддерживания белковой жизни."
-"Хотелось бы узнать, какой из критериев наиболее общо обхватывает возможность наличия жизни на экзопланете."
-crit = {"Mass of the planet" : "mass > 0.85/317.8",
-        "Star Temperature" : "4000<star_teff<7000",
-        "Star Metallicity" : "star_metallicity>0.01",
-        "C" : "molecules.str.contains('C', na=False)",
-        "O" : "molecules.str.contains('O', na=False)",
-        "H" : "molecules.str.contains('H', na=False)",
-        "N" : "molecules.str.contains('N', na=False)"}
-labels1 = list(["Mass of the planet", "Star Temperature", "Star Metallicity", 'C', "O", "H", "N"])
-new_df = pd.DataFrame(index=["Habitable Exoplanets"],
-                      columns=labels1,
-                      dtype=int)
-d=0
-for i in new_df.columns:
-    new_df.loc["Habitable Exoplanets"][i] = len(df1.query(crit.get(i)))
-    d = d + len(df1.query(crit.get(i)))
-fig3, ax2 = plt.subplots()
-ax2.bar(x="Mass of the planet", height=new_df.loc["Habitable Exoplanets"]["Mass of the planet"], color=["red"])
-ax2.bar(x="Star Temperature", height=new_df.loc["Habitable Exoplanets"]["Star Temperature"], color=["green"])
-ax2.bar(x="Star Metallicity", height=new_df.loc["Habitable Exoplanets"]["Star Metallicity"], color=["blue"])
-ax2.bar(x="C", height=new_df.loc["Habitable Exoplanets"]["C"], color=["orange"])
-ax2.bar(x="O", height=new_df.loc["Habitable Exoplanets"]["O"], color=["cyan"])
-ax2.bar(x="H", height=new_df.loc["Habitable Exoplanets"]["H"], color=["black"])
-ax2.bar(x="N", height=new_df.loc["Habitable Exoplanets"]["N"], color=["purple"])
-ax2.set_ylabel("Количество обнаруженных экзопланет")
-ax2.xaxis.set_visible(False)
-plt.title("Количество экзопланет, удоволетворяющих криетриям жизнеспособности")
-plt.legend(labels1, title='Legend', bbox_to_anchor=(1.05, 1), loc='upper left')
-st.pyplot(fig3)
-"Теперь хотелось бы посмотреть, а сколько планет подходит подо все критерии, сколько только под 3? под 4? И так далее."
-selection = st.multiselect("Select habitability parameters", ["Mass of the planet", "Star Temperature",
-                                                              "Star Metallicity", 'C', "O", "H", "N"])
-helpdf = df1
-for i in selection:
-    helpdf = helpdf.query(crit.get(i))
-scatter_df = helpdf.dropna(subset = ["star_distance", "radius"])
-scatter_df["xaxis"] = pd.Series(1, index=scatter_df.index)
-scatter_df["star_distance_l.y"] = scatter_df["star_distance"]*3.26156
-scatter_df["r_earth"] = scatter_df["radius"]*11.2
-earth = {"# name" : "Earth", "xaxis" : 1, "star_name" : "Sun", "star_distance_l.y" : 0, "r_earth" : 1, "detection_type":
-         "Known"}
-scatter_df = scatter_df.append(earth, ignore_index=True)
-st.write(helpdf)
-f"Существует только {len(helpdf)} планет, которые удоволетворяют количеству выбранных критериев жизнеобеспечения."
-"После того, как мы поняли, много их или мало, можно задать вопрос, который интересует каждого: 'А сколько же лететь до этой планеты? Попадет ли человечесто при моей жизни на планету с другими живыми существами?' Для ответа на этот вопрос можно посмотреть на график ниже. По оси Х указаны световые года (грубо говоря: если завтра человечество изобретет двигатель, позволяющий летать со скоростью света, через сколько лет мы доберемся до данной планеты). Также зрителю предлагается сравнить размеры планеты с Землей (точкой в самом начале). Лучше всего расширить этот график на максимум."
-fig4 = px.scatter(data_frame=scatter_df, x="star_distance_l.y", y="xaxis", size="r_earth",
-                  labels=dict(x="Дистанция до планеты (в световых годах)", color="Метод открытия"),
-                  hover_name="# name", color="detection_type")
-fig4.update_xaxes(title_text = "Дистанция до планеты (в световых годах)")
-fig4.update_yaxes(title_text = " ")
-fig4.update_layout(title_text = "Жизнеспособные экзопланеты")
-fig4.update_coloraxes(colorbar_title_text = "Метод открытия")
-st.plotly_chart(fig4)
+with st.echo(code_location="below"):
+
+    st.title('''
+    Spotify trends
+    ''')
+
+    st.write('''
+    Добрый день, коллега. Сегодня мы будем работать с базой данных Spotify, которая лежит на kaggle. 
+    В рамках этого дэшборда мы познакомимся с самим датасетом и попытаемся сделать какие-нибудь выводы о развитии музыки.
+    Было бы здорово, если ты бы сейчас открыл свой любимый музыкальный сервис, включил наушники и понаслаждался треками,
+    которые будут упоминаться в этом небольшом исследовании)
+    ''')
+
+    st.write('''
+    Датасет слишком большой, поэтому я приложил в файл свой файл zip с датасетами. Нужно его вложить в одну папку с demo_app.py
+    Если хероку не сработает, то можно ввести streamlit run demo_app.py в терминал этого файла, открытый в PyCharm.
+    ''')
+
+    st.write('''
+    Для начала я проведу небольшую "чистку" данных. А именно уберу лайвы от музыкантов, чтобы нам было чуть-чуть удобнее
+    и ничего не могло сильно испортить наши данные.
+    ''')
+
+    spotify_track_data = pd.read_csv("tracks.csv")
+    spotify_track_data.head()
+    engine = create_engine('sqlite://', echo=False)
+    spotify_track_data.to_sql('tracks', con=engine)
+
+    engine.execute('''
+                    select count (id)
+                    from tracks
+                    ''').fetchall()
+
+    engine.execute('''
+                    select count (id) 
+                    from tracks 
+                    where name like '%(Live%'
+                    ''').fetchall()
+
+    engine.execute('''
+                    delete 
+                    from tracks
+                    where name like '%(Live'
+                    ''')
+
+    rows = engine.execute('''
+                    select * 
+                    from tracks
+                    ''').fetchall()
+    spotify_track_data = pd.DataFrame(list(rows))
+    spotify_track_data.columns = ['index','id', 'name', 'popularity',
+                                 'duration_ms', 'explicit', 'artists',
+                                 'id_artists', 'release_date', 'danceability',
+                                 'energy', 'key', 'loudness',
+                                 'mode', 'speechiness', 'acousticness',
+                                 'instrumentalness', 'liveness', 'valence',
+                                 'tempo', 'time_signature']
+
+    spotify_track_data.artists = spotify_track_data.artists.replace('['']', np.nan)
+    spotify_track_data.release_date = pd.to_datetime(spotify_track_data.release_date)
+    spotify_track_data['year'] = (pd.to_datetime(spotify_track_data.release_date)).dt.year.apply(pd.to_numeric)
+    spotify_track_data['month'] = (pd.to_datetime(spotify_track_data.release_date)).dt.month
+    st.write(spotify_track_data.head())
+
+    st.write('''
+    Вот так выглядит наш датасет. Есть несколько небольших вопросов: что такое valence, tempo и key. Немного посидев в гугле
+    можно понять, что valence- это "радость/позитивность" песни, tempo= beats per minute (удары в минуту), а key - 
+    нота, которая чаще всего используется в песне.
+    ''')
+
+    st.write('''
+    Хочется увидеть, какое распределение имеют эти данные. На графиках ниже представлены всевозможные распределения для
+    разных параметров, которые есть в таблице. 
+    ''')
+
+    bins = np.arange(0, 1000000, 10000)
+    fig1 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'duration_ms', bins = bins)
+    plt.title('Duration Distribution')
+    plt.xlabel('duration')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig1)
+
+    st.write('''
+    Видно, что где-то около 200000 милисекунд у нас и набирается максимум. 200000 милисекунд = 3 минуты 20 секунд. Вполне
+    естественный результат.
+    ''')
+
+    binsize = 1
+    bins = np.arange(0, spotify_track_data['popularity'].max()+binsize, binsize)
+    fig2 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'popularity', bins = bins)
+    plt.title('Popularity Distribution')
+    plt.xlabel('Popularity')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig2)
+
+    st.write('''
+    Огромная часть треков имеет популярность 0, но это что-то просто близкое к 0 на самом деле и измеряется в современной популярности. 
+    В списке "непопулярных" достаточно много треков Моцарта(Mozart: Symphony No. 35 in D Major, K. 385 "Haffner": I. Allegro con spirito), 
+    Баха (Leipziger Choräle: Schmücke dich, o liebe Seele, BWV 654) и Луи Армстронга (Wild Man Blues). 
+    ''')
+
+    binsize = 0.01
+    bins = np.arange(0, spotify_track_data['danceability'].max()+binsize, binsize)
+    fig3 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'danceability', bins = bins)
+    plt.title('Danceability Distribution')
+    plt.xlabel('Danceability')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig3)
+
+    st.write('''
+    Очень интуитивный результат. Люди в основном слушают музыку, чтобы потанцевать.
+    ''')
+
+    binsize = 0.02
+    bins = np.arange(0, spotify_track_data['acousticness'].max()+binsize, binsize)
+    fig4 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'acousticness', bins = bins)
+    plt.title('Acousticness Distribution')
+    plt.xlabel('Acousticness')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig4)
+
+    st.write('''
+    Тоже достаточно очевидно. В современности музыку выпускают чересчур часто (по сравнению с прошлым). Нынешние технологии
+    позваляют отказывать от приобритения акустических инструментов в пользу электронного звучания
+    ''')
+
+    binsize = 0.02
+    bins = np.arange(0, spotify_track_data['energy'].max()+binsize, binsize)
+    fig5 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'energy', bins = bins)
+    plt.title('Energy Distribution')
+    plt.xlabel('Energy')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig5)
+
+    st.write('''
+    Немного странный результат, ведь кажется, что из-за вышесказанного музыка будет более энергичной, но нет, распределение
+    имеет максимум где-то в 0,5-0,6. В эту категорию попадает огромное количество треков Битлс (Anna (Go To Him) - Remastered 2009),
+    Señorita от Шона Мендеса и Wow. от Пост Малона. Треки, действительно, не самые энергичные.
+    ''')
+
+    binsize = 2
+    bins = np.arange(0, spotify_track_data['tempo'].max()+binsize, binsize)
+    fig6 = plt.figure(figsize=[15, 7])
+    sns.histplot(data = spotify_track_data, x = 'tempo', bins = bins, kde = True)
+    plt.title('Tempo Distribution')
+    plt.xlabel('Tempo in BPM')
+    plt.ylabel('Number of songs')
+    st.pyplot(fig6)
+
+    st.write('''
+    Темп обладает очень интуитивным распределением: очень мало треков ниже 80 бпм, основная масса от 90 до 140 (танцевальная), больше уже
+    слишком тяжело воспринимать на слух. В категорию с 0 бпм попадают так называемые Pause Track в альбомах джаз исполнителей. 
+    Возможно, это нужно было, чтобы домотать что-то, а может просто так вставлена тишина. Треком с максимальным бпм является:
+    ('誰來愛我', "['楊燦明']"). Я его послушал и не понял, откуда там бпм под 250, скорее всего какой-то баг спотифая.
+    ''')
+
+    spotify_year_data = pd.read_csv('data_by_year_o.csv')
+    spotify_year_data = spotify_year_data.set_index('year')
+    spotify_year_data = spotify_year_data.drop('duration_ms' , axis = 1)
+    spotify_year_data = spotify_year_data.drop('loudness' , axis = 1)
+    spotify_year_data = spotify_year_data.drop('tempo' , axis = 1)
+    spotify_year_data = spotify_year_data.drop('popularity' , axis = 1)
+    spotify_year_data = spotify_year_data.drop('key' , axis = 1)
+    spotify_year_data = spotify_year_data.drop('mode' , axis = 1)
+    spotify_year_data.head()
+
+    st.write('''
+    Как я уже показывал на примерах, музыка прошлого менее популярна, чем музыка современная. Давайте посмотрим, как 
+    развивались показатели, на которые мы смотрели только что, со временем. (Здесь должен быть анимированный график, но 
+    он почему-то не работает в стримлите. Написаны комментарии по этому поводу в комментриях к этому участку кода.
+    ''')
+    #Почему-то этот график не работает в стримлите. Если вы вставите его в ноутбук, сделаете pip intsll ffmpeg-python
+    #то там все заработает (работает очень долго). Да, я установил ffmepg-python в PyCharm, но все равно не работает(
+    #st.pyplot(bcr.bar_chart_race(df = spotify_year_data,
+    #                  title = 'yr',
+    #                  cmap = 'prism',
+    #                  fixed_order = True,
+    #                  steps_per_period = 30))
+
+    st.write('''
+    Теперь давайте переведем key и mode в привычные нам обозначения. И посмотрим, какие ноты самые популярные.
+    ''')
+
+    key_mode = pd.DataFrame()
+    semi = ['C', 'Csharp', 'D', 'Dsharp', 'E', 'F', 'Fsharp', 'G', 'Gsharp', 'A', 'Asharp', 'H', 'C']
+    minmaj = {0.0:'min', 1.0:'maj'}
+    key_mode['mode_str'] = spotify_track_data['mode'].replace(minmaj)
+    key_mode['key_str'] =  spotify_track_data['key'].apply(lambda x: semi[x])
+    key_mode['key_mode'] = key_mode['key_str'] + '_' + key_mode['mode_str']
+    fig7 = plt.figure(figsize=(15,7.5))
+    sns.histplot(key_mode['key_mode'].sort_values(), kde = True)
+    plt.xticks(rotation=90)
+    plt.title('Distribution of Keys', size=15)
+    st.pyplot(fig7)
+
+    st.write('''
+    Видно, что в целом музыка построена на трех нотах, при этом все они мажорные. Разговоры про три аккорда от русских
+    исполнителей типа Loqimean или Скриптонита оказались правдой) 
+    ''')
+
+    st.write('''
+    Но нас, как истинных потребителей интересует популярность. От чего она зависит? Давайте рассмотрим корелляции 
+    ''')
+
+    fig8 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=spotify_track_data.sample(1000), x='loudness', y='popularity')
+    ax2.set_title('Correlation between loudness and popularity')
+    ax2.set_xlabel('loudness')
+    st.pyplot(fig8)
+
+    st.write('''
+    Достаточно интересный результат. Вообще неочевидно, что громкость музыки как-то влияет на ее популярность, но это так, как мы
+    видим из графика. Коррелляция очевидно положительна.
+    ''')
+
+    fig9 = plt.figure(figsize=(14.70, 8.27))
+    ax2 = sns.regplot(data=spotify_track_data.sample(1000), x='energy', y='popularity')
+    ax2.set_title('Correlation between energy and popularity')
+    ax2.set_xlabel('energy')
+    st.pyplot(fig9)
+
+    st.write('''
+    Зависимость также прослеживается. Энергичная музыка становится более популярной. Достаточно логично.
+    ''')
+
+    fig10 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=spotify_track_data.sample(2000), x='danceability', y='popularity')
+    ax2.set_title('Correlation between danceability and popularity')
+    ax2.set_xlabel('danceability')
+    st.pyplot(fig10)
+
+    st.write('''
+    Зависимость также присутствует, но она меньше. Все же не всегда людям нравится музыка, под которую можно танцевать в 
+    клубах. Звучит обнадеживающе)
+    ''')
+
+    fig11 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=spotify_track_data.sample(2000), x='valence', y='popularity')
+    ax2.set_title('Correlation between valence and popularity')
+    ax2.set_xlabel('valence')
+    st.pyplot(fig11)
+
+    st.write('''
+    Зависимость не прослеживается. Кажется, что она примерно 0, то есть людям одновременно нравятся и веселые песни и 
+    "на погрустить". 
+    ''')
+
+    st.write('''
+    Но, вдруг, это все эти нулевые выборсы, которых очень много. Вдруг именно треки с большой популярностью тянут нас вниз,
+    не давая сделать никаких выводов о музыке. Давайте тогда взглянем на top-100 треков сл спотифая прямо сейчас. Как они, кажется
+    , устроены. В основном, они должны быть танцевальными (спасибо тиктоку), не сильно лиричными и с малым количеством инструментала. 
+    Но конечно же, там и есть треки, которые популярны именно благодаря акустике и музыкальности (не обязательно танцевальной).
+    ''')
+
+    df_top_100 = spotify_track_data.sort_values(by=['popularity'], ascending=False)[0:100]
+    st.write(df_top_100.head())
+
+    fig12 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=df_top_100, x='danceability', y='popularity')
+    ax2.set_title('Correlation between danceability and popularity')
+    ax2.set_xlabel('danceability')
+    st.pyplot(fig12)
+
+    fig13 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=df_top_100, x='energy', y='popularity')
+    ax2.set_title('Correlation between energy and popularity')
+    ax2.set_xlabel('energy')
+    st.pyplot(fig13)
+
+    fig14 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=df_top_100, x='acousticness', y='popularity')
+    ax2.set_title('Correlation between acousticness and popularity')
+    ax2.set_xlabel('acousticness')
+    st.pyplot(fig14)
+
+    fig15 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=df_top_100, x='speechiness', y='popularity');
+    ax2.set_title('Correlation between speechiness and popularity');
+    ax2.set_xlabel('speechiness')
+    st.pyplot(fig15)
+
+    st.write('''
+    Практически никаких выводов снова сделать нельзя. Причем мы видим, что на самом деле топ-100 очень разнообразен, 
+    нельзя сказать, что все треки танцевальные, нельзя сказать, что все они лишены акустики, и нельзя сказать, что среди 
+    них нет медлячков.
+    ''')
+
+    fig16 = plt.figure(figsize=(15, 7))
+    ax2 = sns.regplot(data=df_top_100, x='year', y='popularity');
+    ax2.set_title('Correlation between year and popularity');
+    ax2.set_xlabel('year')
+    st.pyplot(fig16)
+
+    st.write('''
+    Вот отсюда уже можно сделать какой-то вывод. Видно, что вкусы людей очень быстро меняются и адаптируются к новейшим трекам. 
+    Публика хочет нового и нового.
+    ''')
+
+    st.write('''
+    Теперь давайте посмотрим на то, как менялись самые популярные треки по годам. Будем брать топ-50 песен. Самую популярную, 
+    медиану и последнюю. Видно, как снижается instrumentallness и acousticness по годам. (Извините, но грузится очень долго)
+    ''')
+
+    x = int(st.number_input(label='Пожалуйста, введите год, который вас интересует. С 1922. Не забудьте нажать Enter после ввода)'))
+
+    r = ro.r
+    r['source']('test.R')
+    filter_year_function_r = ro.globalenv['filter_year']
+    get_three_function_r = ro.globalenv['get_three']
+    with localconverter(ro.default_converter + pandas2ri.converter):
+        spotify_track_data_r = ro.conversion.py2rpy(spotify_track_data)
+    df_result_r = filter_year_function_r(spotify_track_data_r, x)
+    df_fin_res = get_three_function_r(df_result_r)
+    ro.r.assign("my_df", df_fin_res)
+    ro.r("save(my_df, file='{}')".format('3songs.r'))
+    with localconverter(ro.default_converter + pandas2ri.converter):
+        pd_from_r_df = ro.conversion.rpy2py(df_result_r)
+        pd_from_r_df_1 = ro.conversion.rpy2py(df_fin_res)
+
+    pd_from_r_df = pd_from_r_df.reset_index()
+    pd_from_r_df_1 = pd_from_r_df_1.reset_index()
+
+    pd_for_plot = pd_from_r_df_1.drop(['level_0', 'index', 'id', 'popularity',
+                                       'duration_ms', 'explicit', 'artists', 'id_artists',
+                                       'release_date', 'key', 'mode', 'year', 'month', 'tempo',
+                                       'loudness', 'time_signature'], axis=1)
+
+    categories = ['danceability', 'energy', 'acousticness',
+                  'instrumentalness', 'valence', 'speechiness', 'liveness']
+    N = len(categories)
+    angles = [n / float(N) * 2 * pi for n in range(N)]
+    angles += angles[:1]
+    fig17 = plt.figure(figsize=(15,7))
+    ax = plt.subplot(111, polar=True)
+    ax.set_theta_offset(pi / 2)
+    ax.set_theta_direction(-1)
+    plt.xticks(angles[:-1], categories)
+    plt.yticks([0.2, 0.4, 0.6, 0.8, 1], ["0.2", "0.4", "0.6", '0.8', '1'], color="grey", size=7)
+    plt.ylim(0, 1.2)
+    values = pd_for_plot.loc[0].drop('name').values.flatten().tolist()
+    values += values[:1]
+    ax.plot(angles, values, linewidth=1, linestyle='solid', label=pd_for_plot.name[0])
+    ax.fill(angles, values, 'b', alpha=0.1)
+    values = pd_for_plot.loc[1].drop('name').values.flatten().tolist()
+    values += values[:1]
+    ax.plot(angles, values, linewidth=1, linestyle='solid', label=pd_for_plot.name[1])
+    ax.fill(angles, values, 'r', alpha=0.1)
+    values = pd_for_plot.loc[2].drop('name').values.flatten().tolist()
+    values += values[:1]
+    ax.plot(angles, values, linewidth=1, linestyle='solid', label=pd_for_plot.name[2])
+    ax.fill(angles, values, 'r', alpha=0.1)
+    plt.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
+
+    st.pyplot(fig17)
